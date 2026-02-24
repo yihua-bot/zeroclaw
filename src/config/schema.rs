@@ -769,6 +769,9 @@ pub struct GatewayConfig {
     /// Require pairing before accepting requests (default: true)
     #[serde(default = "default_true")]
     pub require_pairing: bool,
+    /// Optional static bearer token for gateway auth (Authorization: Bearer <token>).
+    #[serde(default)]
+    pub api_key: Option<String>,
     /// Allow binding to non-localhost without a tunnel (default: false)
     #[serde(default)]
     pub allow_public_bind: bool,
@@ -842,6 +845,7 @@ impl Default for GatewayConfig {
             require_pairing: true,
             allow_public_bind: false,
             paired_tokens: Vec::new(),
+            api_key: None,
             pair_rate_limit_per_minute: default_pair_rate_limit(),
             webhook_rate_limit_per_minute: default_webhook_rate_limit(),
             trust_forwarded_headers: false,

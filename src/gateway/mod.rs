@@ -889,20 +889,33 @@ async fn handle_webhook(
         return (StatusCode::TOO_MANY_REQUESTS, Json(err));
     }
 
-    // ── Bearer token auth (pairing) ──
-    if state.pairing.require_pairing() {
-        let auth = headers
-            .get(header::AUTHORIZATION)
-            .and_then(|v| v.to_str().ok())
-            .unwrap_or("");
-        let token = auth.strip_prefix("Bearer ").unwrap_or("");
-        if !state.pairing.is_authenticated(token) {
-            tracing::warn!("Webhook: rejected — not paired / invalid bearer token");
-            let err = serde_json::json!({
-                "error": "Unauthorized — pair first via POST /pair, then send Authorization: Bearer <token>"
-            });
-            return (StatusCode::UNAUTHORIZED, Json(err));
-        }
+    // ── Bearer token auth (pairing or static API key) ──
+    let auth = headers
+        .get(header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    let token = auth.strip_prefix("Bearer ").unwrap_or("");
+    let gateway_key = state
+        .config
+        .lock()
+        .gateway
+        .api_key
+        .as_deref()
+        .unwrap_or("");
+    let api_key_ok = !gateway_key.is_empty() && constant_time_eq(token, gateway_key);
+    if state.pairing.require_pairing() && !state.pairing.is_authenticated(token) && !api_key_ok {
+        tracing::warn!("Webhook: rejected — not paired / invalid bearer token");
+        let err = serde_json::json!({
+            "error": "Unauthorized — pair first via POST /pair, then send Authorization: Bearer <token>"
+        });
+        return (StatusCode::UNAUTHORIZED, Json(err));
+    }
+    if !state.pairing.require_pairing() && !gateway_key.is_empty() && !api_key_ok {
+        tracing::warn!("Webhook: rejected — invalid gateway API key");
+        let err = serde_json::json!({
+            "error": "Unauthorized — invalid gateway API key"
+        });
+        return (StatusCode::UNAUTHORIZED, Json(err));
     }
 
     // ── Webhook secret auth (optional, additional layer) ──

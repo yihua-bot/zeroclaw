@@ -27,11 +27,15 @@ fn require_auth(
     state: &AppState,
     headers: &HeaderMap,
 ) -> Result<(), (StatusCode, Json<serde_json::Value>)> {
+    let token = extract_bearer_token(headers).unwrap_or("");
+    let config = state.config.lock();
+    let gateway_key = config.gateway.api_key.as_deref().unwrap_or("");
+    if !gateway_key.is_empty() && token == gateway_key {
+        return Ok(());
+    }
     if !state.pairing.require_pairing() {
         return Ok(());
     }
-
-    let token = extract_bearer_token(headers).unwrap_or("");
     if state.pairing.is_authenticated(token) {
         Ok(())
     } else {
