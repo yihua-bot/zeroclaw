@@ -18,7 +18,8 @@ use crate::channels::{
 use crate::config::Config;
 use crate::cost::CostTracker;
 use crate::memory::{self, Memory, MemoryCategory};
-use crate::providers::{self, ChatMessage, Provider, StreamOptions};
+use crate::providers::{self, ChatMessage, Provider};
+use crate::providers::traits::StreamOptions;
 use crate::runtime;
 use crate::security::pairing::{constant_time_eq, is_public_bind, PairingGuard};
 use crate::security::SecurityPolicy;
