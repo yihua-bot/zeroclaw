@@ -787,7 +787,7 @@ async fn handle_pair(
             "error": "Too many pairing requests. Please retry later.",
             "retry_after": RATE_LIMIT_WINDOW_SECS,
         });
-        return (axum::http::StatusCode::TOO_MANY_REQUESTS, Json(err)).into_response();
+        return (axum::http::StatusCode::TOO_MANY_REQUESTS, Json(err));
     }
 
     let code = headers
@@ -1146,7 +1146,7 @@ async fn handle_webhook(
                 });
 
             let body = serde_json::json!({"response": response, "model": state.model});
-            (StatusCode::OK, Json(body))
+            (StatusCode::OK, Json(body)).into_response()
         }
         Err(e) => {
             let duration = started_at.elapsed();
@@ -1184,7 +1184,7 @@ async fn handle_webhook(
 
             tracing::error!("Webhook provider error: {}", sanitized);
             let err = serde_json::json!({"error": "LLM request failed"});
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(err))
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(err)).into_response()
         }
     }
 }
