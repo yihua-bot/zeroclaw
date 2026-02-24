@@ -662,6 +662,7 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
     let app = Router::new()
         // ── Existing routes ──
         .route("/health", get(handle_health))
+        .route("/health/stream", get(handle_stream_health))
         .route("/metrics", get(handle_metrics))
         .route("/pair", post(handle_pair))
         .route("/webhook", post(handle_webhook))
@@ -727,6 +728,23 @@ async fn handle_health(State(state): State<AppState>) -> impl IntoResponse {
         "paired": state.pairing.is_paired(),
         "require_pairing": state.pairing.require_pairing(),
         "runtime": crate::health::snapshot_json(),
+    });
+    Json(body)
+}
+
+/// GET /health/stream — streaming capability snapshot
+async fn handle_stream_health(State(state): State<AppState>) -> impl IntoResponse {
+    let provider_label = state
+        .config
+        .lock()
+        .default_provider
+        .clone()
+        .unwrap_or_else(|| "unknown".to_string());
+    let body = serde_json::json!({
+        "status": "ok",
+        "provider": provider_label,
+        "model": state.model,
+        "supports_streaming": state.provider.supports_streaming(),
     });
     Json(body)
 }
