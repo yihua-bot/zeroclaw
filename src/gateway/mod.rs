@@ -1015,6 +1015,32 @@ async fn handle_webhook(
         });
 
     if stream_requested {
+        if !state.provider.supports_streaming() {
+            match run_gateway_chat_simple(&state, message).await {
+                Ok(response) => {
+                    let stream = futures_util::stream::iter(vec![
+                        Ok::<Event, Infallible>(Event::default().data(response)),
+                        Ok::<Event, Infallible>(Event::default().data("[DONE]")),
+                    ]);
+                    return Sse::new(stream)
+                        .keep_alive(KeepAlive::default())
+                        .into_response();
+                }
+                Err(e) => {
+                    let sanitized = providers::sanitize_api_error(&e.to_string());
+                    let stream = futures_util::stream::iter(vec![
+                        Ok::<Event, Infallible>(
+                            Event::default().data(format!("[ERROR] {sanitized}")),
+                        ),
+                        Ok::<Event, Infallible>(Event::default().data("[DONE]")),
+                    ]);
+                    return Sse::new(stream)
+                        .keep_alive(KeepAlive::default())
+                        .into_response();
+                }
+            }
+        }
+
         let system_prompt = {
             let config_guard = state.config.lock();
             crate::channels::build_system_prompt(
@@ -1062,9 +1088,9 @@ async fn handle_webhook(
                 }
                 Err(err) => {
                     let sanitized = providers::sanitize_api_error(&err.to_string());
-                    Some(Ok::<Event, Infallible>(
-                        Event::default().data(format!("[ERROR] {sanitized}")),
-                    ))
+                    Some(Ok::<Event, Infallible>(Event::default().data(format!(
+                        "[ERROR] {sanitized}"
+                    ))))
                 }
             }
         });
