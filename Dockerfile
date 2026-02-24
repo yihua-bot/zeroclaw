@@ -107,11 +107,18 @@ EXPOSE 42617
 ENTRYPOINT ["zeroclaw"]
 CMD ["gateway"]
 
-# ── Stage 3: Production Runtime (Distroless) ─────────────────
-FROM gcr.io/distroless/cc-debian13:nonroot@sha256:84fcd3c223b144b0cb6edc5ecc75641819842a9679a3a58fd6294bec47532bf7 AS release
+# ── Stage 3: Production Runtime (Debian) ──────────────────────
+FROM debian:trixie-slim@sha256:f6e2cfac5cf956ea044b4bd75e6397b4372ad88fe00908045e9a0d21712ae3ba AS release
+
+# Install minimal runtime deps
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/zeroclaw /usr/local/bin/zeroclaw
 COPY --from=builder /zeroclaw-data /zeroclaw-data
+COPY docker-entrypoint.sh /usr/local/bin/zeroclaw-entrypoint
+RUN chmod +x /usr/local/bin/zeroclaw-entrypoint
 
 # Environment setup
 ENV ZEROCLAW_WORKSPACE=/zeroclaw-data/workspace
@@ -126,5 +133,5 @@ ENV ZEROCLAW_GATEWAY_PORT=42617
 WORKDIR /zeroclaw-data
 USER 65534:65534
 EXPOSE 42617
-ENTRYPOINT ["zeroclaw"]
+ENTRYPOINT ["zeroclaw-entrypoint"]
 CMD ["gateway"]
