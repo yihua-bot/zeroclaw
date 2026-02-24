@@ -18,7 +18,7 @@ use crate::channels::{
 use crate::config::Config;
 use crate::cost::CostTracker;
 use crate::memory::{self, Memory, MemoryCategory};
-use crate::providers::{self, ChatMessage, Provider};
+use crate::providers::{self, ChatMessage, Provider, StreamOptions};
 use crate::runtime;
 use crate::security::pairing::{constant_time_eq, is_public_bind, PairingGuard};
 use crate::security::SecurityPolicy;
@@ -30,12 +30,17 @@ use axum::{
     body::Bytes,
     extract::{ConnectInfo, Query, State},
     http::{header, HeaderMap, StatusCode},
-    response::{IntoResponse, Json},
+    response::{
+        sse::{Event, KeepAlive, Sse},
+        IntoResponse, Json,
+    },
     routing::{delete, get, post, put},
     Router,
 };
 use parking_lot::Mutex;
+use futures_util::StreamExt;
 use std::collections::HashMap;
+use std::convert::Infallible;
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -869,6 +874,8 @@ async fn run_gateway_chat_with_tools(state: &AppState, message: &str) -> anyhow:
 #[derive(serde::Deserialize)]
 pub struct WebhookBody {
     pub message: String,
+    #[serde(default)]
+    pub stream: Option<bool>,
 }
 
 /// POST /webhook — main webhook endpoint
@@ -968,6 +975,12 @@ async fn handle_webhook(
     }
 
     let message = &webhook_body.message;
+    let accept_sse = headers
+        .get(header::ACCEPT)
+        .and_then(|v| v.to_str().ok())
+        .map(|v| v.contains("text/event-stream"))
+        .unwrap_or(false);
+    let stream_requested = webhook_body.stream.unwrap_or(false) || accept_sse;
 
     if state.auto_save {
         let key = webhook_memory_key();
@@ -999,6 +1012,66 @@ async fn handle_webhook(
             model: model_label.clone(),
             messages_count: 1,
         });
+
+    if stream_requested {
+        let system_prompt = {
+            let config_guard = state.config.lock();
+            crate::channels::build_system_prompt(
+                &config_guard.workspace_dir,
+                &state.model,
+                &[], // tools - empty for simple chat
+                &[], // skills
+                Some(&config_guard.identity),
+                None,
+            )
+        };
+
+        let messages = vec![
+            ChatMessage::system(system_prompt),
+            ChatMessage::user(message),
+        ];
+
+        let multimodal_config = state.config.lock().multimodal.clone();
+        let prepared =
+            match crate::multimodal::prepare_messages_for_provider(&messages, &multimodal_config)
+                .await
+            {
+                Ok(p) => p,
+                Err(e) => {
+                    let err = serde_json::json!({"error": format!("Multimodal prep failed: {e}")});
+                    return (StatusCode::BAD_REQUEST, Json(err)).into_response();
+                }
+            };
+
+        let stream = state.provider.stream_chat_with_history(
+            &prepared.messages,
+            &state.model,
+            state.temperature,
+            StreamOptions::new(true),
+        );
+
+        let sse_stream = stream.filter_map(|chunk| async move {
+            match chunk {
+                Ok(delta) => {
+                    if delta.is_final {
+                        Some(Ok::<Event, Infallible>(Event::default().data("[DONE]")))
+                    } else {
+                        Some(Ok::<Event, Infallible>(Event::default().data(delta.delta)))
+                    }
+                }
+                Err(err) => {
+                    let sanitized = providers::sanitize_api_error(&err.to_string());
+                    Some(Ok::<Event, Infallible>(
+                        Event::default().data(format!("[ERROR] {sanitized}")),
+                    ))
+                }
+            }
+        });
+
+        return Sse::new(sse_stream)
+            .keep_alive(KeepAlive::default())
+            .into_response();
+    }
 
     match run_gateway_chat_simple(&state, message).await {
         Ok(response) => {
