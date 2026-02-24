@@ -895,14 +895,15 @@ async fn handle_webhook(
         .and_then(|v| v.to_str().ok())
         .unwrap_or("");
     let token = auth.strip_prefix("Bearer ").unwrap_or("");
-    let gateway_key = state
-        .config
-        .lock()
-        .gateway
-        .api_key
-        .as_deref()
-        .unwrap_or("");
-    let api_key_ok = !gateway_key.is_empty() && constant_time_eq(token, gateway_key);
+    let gateway_key = {
+        let guard = state.config.lock();
+        guard
+            .gateway
+            .api_key
+            .clone()
+            .unwrap_or_default()
+    };
+    let api_key_ok = !gateway_key.is_empty() && constant_time_eq(token, gateway_key.as_str());
     if state.pairing.require_pairing() && !state.pairing.is_authenticated(token) && !api_key_ok {
         tracing::warn!("Webhook: rejected — not paired / invalid bearer token");
         let err = serde_json::json!({
