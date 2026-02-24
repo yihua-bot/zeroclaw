@@ -787,7 +787,7 @@ async fn handle_pair(
             "error": "Too many pairing requests. Please retry later.",
             "retry_after": RATE_LIMIT_WINDOW_SECS,
         });
-        return (StatusCode::TOO_MANY_REQUESTS, Json(err)).into_response();
+        return (axum::http::StatusCode::TOO_MANY_REQUESTS, Json(err)).into_response();
     }
 
     let code = headers
@@ -935,14 +935,14 @@ async fn handle_webhook(
         let err = serde_json::json!({
             "error": "Unauthorized — pair first via POST /pair, then send Authorization: Bearer <token>"
         });
-        return (StatusCode::UNAUTHORIZED, Json(err)).into_response();
+        return (axum::http::StatusCode::UNAUTHORIZED, Json(err)).into_response();
     }
     if !state.pairing.require_pairing() && !gateway_key.is_empty() && !api_key_ok {
         tracing::warn!("Webhook: rejected — invalid gateway API key");
         let err = serde_json::json!({
             "error": "Unauthorized — invalid gateway API key"
         });
-        return (StatusCode::UNAUTHORIZED, Json(err)).into_response();
+        return (axum::http::StatusCode::UNAUTHORIZED, Json(err)).into_response();
     }
 
     // ── Webhook secret auth (optional, additional layer) ──
@@ -958,7 +958,7 @@ async fn handle_webhook(
             _ => {
                 tracing::warn!("Webhook: rejected request — invalid or missing X-Webhook-Secret");
                 let err = serde_json::json!({"error": "Unauthorized — invalid or missing X-Webhook-Secret header"});
-            return (StatusCode::UNAUTHORIZED, Json(err)).into_response();
+            return (axum::http::StatusCode::UNAUTHORIZED, Json(err)).into_response();
             }
         }
     }
@@ -971,7 +971,7 @@ async fn handle_webhook(
             let err = serde_json::json!({
                 "error": "Invalid JSON body. Expected: {\"message\": \"...\"}"
             });
-            return (StatusCode::BAD_REQUEST, Json(err)).into_response();
+            return (axum::http::StatusCode::BAD_REQUEST, Json(err)).into_response();
         }
     };
 
@@ -989,7 +989,7 @@ async fn handle_webhook(
                 "idempotent": true,
                 "message": "Request already processed for this idempotency key"
             });
-            return (StatusCode::OK, Json(body)).into_response();
+            return (axum::http::StatusCode::OK, Json(body)).into_response();
         }
     }
 
@@ -1084,7 +1084,7 @@ async fn handle_webhook(
                 Ok(p) => p,
                 Err(e) => {
                     let err = serde_json::json!({"error": format!("Multimodal prep failed: {e}")});
-                    return (StatusCode::BAD_REQUEST, Json(err)).into_response();
+                    return (axum::http::StatusCode::BAD_REQUEST, Json(err)).into_response();
                 }
             };
 
