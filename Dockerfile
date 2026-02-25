@@ -63,14 +63,18 @@ RUN mkdir -p /zeroclaw-data/.zeroclaw /zeroclaw-data/workspace && \
 workspace_dir = "/zeroclaw-data/workspace"
 config_path = "/zeroclaw-data/.zeroclaw/config.toml"
 api_key = ""
-default_provider = "openrouter"
-default_model = "anthropic/claude-sonnet-4-20250514"
+default_provider = "zai-cn"
+default_model = "glm-5"
 default_temperature = 0.7
 
 [gateway]
 port = 42617
 host = "[::]"
 allow_public_bind = true
+
+[reliability]
+# Per-model fallback chain for GLM models
+model_fallbacks = { "glm-5" = ["glm-4.7", "glm-4.6", "glm-4.5-air"] }
 EOF
 
 # ── Stage 2: Development Runtime (Debian) ────────────────────
